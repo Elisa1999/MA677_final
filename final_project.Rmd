@@ -1,0 +1,285 @@
+---
+title: "MA677"
+author: "Zhihui Zhang"
+date: "5/11/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readxl")
+library(MASS)
+library(fitdistrplus)
+library(stats)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+# Part 1 
+
+## Exercise 4.25
+```{r}
+#density and distribution function 
+fx <- function(x, a = 0, b = 1) dunif(x, a, b)
+Fx <- function(x, a = 0, b = 1) punif(x, a, b, lower.tail=FALSE)
+
+integral <- function(x, k, n, a=0, b=1) {
+  x * (1 - Fx(x, a, b))^(k-1) * Fx(x, a, b)^(n-k) * fx(x, a, b)
+}
+## expectation
+expectation <- function(k,n, a=0, b=1) {
+  return((1/beta(k, n - k + 1)) * integrate(integral, -Inf , Inf, k, n, a, b)$value)
+}
+medianapprox<-function(i,n){
+  return((i-1/3)/(n+1/3))
+}
+```
+
+```{r}
+expectation(3,5)
+medianapprox(3,5)
+```
+
+```{r}
+expectation(5.5,10)
+medianapprox(5.5,10)
+```
+
+The result of two are quite similar. We first obtain expectation of the binomial distribution which is equal its median. And then we calculate the estimated median from the formula the exercise provided. 
+
+
+## Exercise 4.27
+
+Exercise 4.27: The following is the average amount of rainfall (in mm/hour) per storm in a series of storms in Valencia, southwest Ireland. Data from two months are reported below.
+(a) Compare the summary statistics for the two months.
+(b) Look at the QQ-plot of the data and, based on the shape, suggest what model is reasonable.
+(c) Fit a gamma model to the data from each month. Report the MLEs and standard errors, and draw the profile likelihoods for the mean parameters. Compare the parameters from the two months.
+(d) Check the adequacy of the gamma model using a gamma QQ-plot.
+```{r}
+#import the data
+jan <- c(0.15,0.25,0.10,0.20,1.85,1.97,0.80,0.20,0.10,0.50,0.82,0.40,1.80,0.20,1.12,1.83,
+       0.45,3.17,0.89,0.31,0.59,0.10,0.10,0.90,0.10,0.25,0.10,0.90)
+jul <- c(0.30,0.22,0.10,0.12,0.20,0.10,0.10,0.10,0.10,0.10,0.10,0.17,0.20,2.80,0.85,0.10,
+       0.10,1.23,0.45,0.30,0.20,1.20,0.10,0.15,0.10,0.20,0.10,0.20,0.35,0.62,0.20,1.22,
+       0.30,0.80,0.15,1.53,0.10,0.20,0.30,0.40,0.23,0.20,0.10,0.10,0.60,0.20,0.50,0.15,
+      0.60,0.30,0.80,1.10,
+      0.2,0.1,0.1,0.1,0.42,0.85,1.6,0.1,0.25,0.1,0.2,0.1)
+```
+
+
+### (a)
+```{r}
+#check the summary statistics
+summary(jan)
+summary(jul)
+```
+The minimum value of the rainfall in January and July are the same. The median, mean and max rainfall of January are larger than those in July.
+
+### (b)
+```{r}
+par(mfrow = c(2,1))
+qqnorm(jan, pch = 1)
+qqline(jan, col = "red", lwd = 2)
+
+qqnorm(jul, pch = 1)
+qqline(jul, col = "red", lwd = 2)
+```
+The normal Q-Q plots of both jul and jan have light tales, which indicates that the data is not normally distributed. We then show the density plots of our data to further explore the distributions of our data.
+
+```{r}
+par(mfrow = c(1, 2))  
+plot(density(jan), main = 'density of rainfall in Jan')
+plot(density(jul), main = 'density of rainfall in Jul')
+```
+The density plots above indicates that our data mainly follow the Beta distribution. We also can use the shaprio-Wilk normality test to test whether our data is normally distributed.
+
+```{r}
+shapiro.test(jan)
+shapiro.test(jul)
+```
+The output above shows that our data do not follow the normal distribution.
+
+(c) Fit a gamma model to the data from each month. Report the MLEs and standard errors, and draw the profile likelihoods for the mean parameters. Compare the parameters from the two months.
+```{r}
+# fit a gamma model
+model1 <- fitdist(jan, distr = "gamma", method = "mle")
+summary(model1)
+par(mar=c(1,1,1,1))
+plot(model1)
+```
+```{r}
+#MLE
+c(model1$estimate[1]-1.96*model1$sd[1], model1$estimate[1]-1.96*model1$sd[1])
+```
+
+```{r}
+# use numerical optimization routine to get the maximum of the log-likelihood function
+log_link =function(theta){
+   logL <- sum(log(dgamma(jan, theta[1], theta[2])))
+   return(-logL)
+}
+
+optim(c(1,1),log_link)
+```
+
+```{r warning = FALSE}
+# profile likelihood.
+prof_log_lik = function(a){
+   b = (optim(1,function(z)-sum(log(dgamma(jan,a,z)))))$par
+   return(-sum(log(dgamma(jan,a,b))))
+ } 
+vx <- seq(.5,3,length=101)
+vl <- -Vectorize(prof_log_lik)(vx)
+plot(vx,vl,type="l",main = "jan profile likelihood")
+optim(1,prof_log_lik)
+```
+
+
+```{r}
+model2 <- fitdist(jul, distr = "gamma", method = "mle")
+summary(model2)
+par(mar=c(1,1,1,1))
+plot(model2)
+# maximum likelihood estimator
+c(model2$estimate[1]- 1.96*model2$sd[1], model2$estimate[1]+ 1.96*model2$sd[1])
+```
+
+```{r  warning = FALSE}
+# use numerical optimization routine to get the maximum of the log-likelihood function
+log_link <- function(theta){
+   logL=sum(log(dgamma(jul,theta[1],theta[2])))
+   return(-logL)
+ }
+optim(c(1,1),log_link)
+# profile likelihood.
+prof_log_lik=function(a){
+   b=(optim(1,function(z) -sum(log(dgamma(jul,a,z)))))$par
+   return(-sum(log(dgamma(jul,a,b))))
+ } 
+vx <- seq(.5,3,length=101)
+vl <- -Vectorize(prof_log_lik)(vx)
+plot(vx,vl,type="l",main = "Jul profile likelihood")
+optim(1,prof_log_lik)
+```
+ 
+Compare the parameters of Jan and Jul data, rainfall on Jul has higher maximum likelihood estimator, and it fits better.
+ 
+### (d)
+```{r}
+# Plot qq-plot for gamma distributed variable
+qqGamma <- function(x, ylab = deparse(substitute(x)),
+                    xlab = "Theoretical Quantiles", 
+                    main = "Gamma Distribution QQ Plot")
+{
+    xx = x[!is.na(x)]
+    aa = (mean(xx))^2 / var(xx)
+    ss = var(xx) / mean(xx)
+    test = rgamma(length(xx), shape = aa, scale = ss)
+    qqplot(test, xx, xlab = xlab, ylab = ylab, main = main)
+    abline(0,1, lty = 2)
+}
+```
+```{r}
+par(mfrow = c(1,2))
+qqGamma(jan)
+qqGamma(jul)
+```
+
+
+
+## Exercise 4.39
+```{r}
+weights <- c(0.4,1.0, 1.9, 3.0, 5.5,  8.1, 12.1, 25.6, 115.0, 119.5, 154.5, 157.0, 175.0, 419.0, 423.0,   440.0, 655.0, 680.0, 50.0, 56.0, 70.0, 115.0, 179.0, 180.0, 406.0, 1320.0,  4603.0, 5712.0)
+par(mfrow = c(1,2))
+hist(weights)
+boxcox(lm(weights ~ 1))
+``` 
+The center dashed vertical line in the right figure represents the estimated parameter $\hat{\lambda}$ and the others the 95% confidence interval of the estimation. The previous plot shows that the 0 is inside the confidence interval of the optimal $\lambda$ and as the estimation of the parameter is really close to 0 in this example, the best option is to apply the logarithmic transformation of the data.
+
+```{r}
+new_weights <- log(weights)
+# Histogram
+hist(new_weights)
+```
+
+```{r}
+shapiro.test(new_weights)
+```
+As the p-value is greater than the usual levels of significance (1%, 5% and 10%) we have no evidence to reject the null hypothesis of normality.
+
+
+# Part 2
+1. Introduction
+We will consider the data which reports amounts of precipitation during storms in Illinois from 1960 to 1964. These data were gathered in a study of the natural variability of rainfall. The rainfall from summer storms was measured by a network of rain gauges in southern Illinois for the years 1960-1964 (Changnon and Huff, 1967). 
+
+```{r, include = FALSE}
+# import the data
+dat <- read_excel('Illinois_rain_1960-1964(2).xlsx')
+```
+
+
+Use the data to identify the distribution of rainfall produced by the storms in southern Illinois.
+Estimate the parameters of the distribution using MLE. Prepare a discussion of your estimation,
+including how confident you are about your identification of the distribution and the accuracy of
+your parameter estimates.
+
+2. Exploratory data analysis
+```{r}
+#transform the data
+dat <- dat %>% pivot_longer(1:5, names_to = 'year', values_to = 'rainfall')
+```
+
+```{r warning=FALSE}
+#visualize the density plot 
+dat %>% na.omit() %>% ggplot( aes(x=rainfall, fill=year)) +
+   geom_histogram(aes(y=..density..), alpha=0.5, 
+                position="identity") + 
+  geom_density(alpha = 0.2) + 
+  facet_grid(.~year)
+```
+Based on the visualization above, we suggest that the rainfalls in each year follow the gamma distribution. We will fit a regression with gamma distribution to estimate the parameters of the distribution using MLE.
+
+3. Gamma distribution model 
+```{r}
+rainfall <- dat %>% na.omit() %>% select(rainfall) %>% unlist(use.names = FALSE)
+fit_mle <- fitdist(rainfall,'gamma',method='mle') #MLE estimation
+summary(bootdist(fit_mle)) #bootstrap get confidence interval
+```
+
+```{r}
+plot(fit_mle)
+```
+The figures above shows that our data fit the gamma distribution. 
+
+4. Identify dry and wet years
+
+```{r}
+# calculate the mean from the gamma distribution we fit
+#shape/rate 
+exp_rainfall <- round(0.4423433/1.9756396,2)
+rainfall_exp <- c(round(0.5070193/2.4498221,2), round(0.3746578/1.4798596,2))
+dat2 <- dat %>% na.omit() %>% group_by(year) %>% summarise(
+          sd_rainfall = round(sd(rainfall, na.rm = TRUE),2),
+          median_rainfall = round(median(rainfall, na.rm = TRUE),2),
+          mean_rainfall = round(mean(rainfall, na.rm = TRUE),2),
+          sum_rainfall = round(sum(rainfall, na.rm = TRUE),2),
+          storm_num = n())
+
+dat2$type <- ifelse(dat2$mean_rainfall > rainfall_exp [2], 'wet', ifelse(dat2$mean_rainfall < rainfall_exp [1], 'dry', 'normal'))
+```
+
+I will use the confidence interval of the mean estimated from the gamma distribution above as criteria to identify whether the year is a dry year or a wet year. If the average rainfall of the storm in each year is within the 95% confidence interval, we will consider this year is a normal year. If the rainfall exceeds the upper bound, this year would be a wet year and vice versa. 
+
+```{r}
+dat2
+```
+
+
+From the table above, we could compare the summary statistics of the rainfall of each year. Based on the criteria I used, the wet years are 1961, 1963; the dry years are 1964 and 1962; and, the normal year is 1960. However, the standard I use is not very reasonable when we comparing the sum of the rainfall per year. From the data we have, 1961 is a dry year but it had largest number of storms, where the wet year - 1963 has smallest number of storms. Therefore, the wet years are wet because individual storms produced more rain. 
+ 
+### Extent
+
+The article written by Floyd Huff mentioned that the amount of rainfall is variable and the individual effects of mean rainfall, storm duration,and other storm factors were small and erratic. Under the circumstances, we might not have enough confidence to suggest that the storm has no relationship with rainfall due to the small data set.
